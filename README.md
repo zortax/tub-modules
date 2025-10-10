@@ -1,8 +1,8 @@
 # TU Berlin Module Search
 
-A web application for searching and exploring TU Berlin module descriptions.
+A web application for searching and exploring TU Berlin module descriptions (because Moses sucks ass).
 
-> **  Disclaimer**: This project was vibe-coded. No correctness guarantees
+> **Disclaimer**: This project was vibe-coded. No correctness guarantees
 > are provided. Use at your own risk.
 
 ## Features
@@ -17,9 +17,8 @@ A web application for searching and exploring TU Berlin module descriptions.
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable)
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 - NodeJS/npm
-- [cargo-leptos](https://github.com/leptos-rs/cargo-leptos) (`cargo install
+- [cargo-leptos](https://github.com/leptos-rs/cargo-leptos) (`cargo install cargo-leptos`)
 - [sqlx-cli](https://crates.io/crates/sqlx-cli) (`cargo install sqlx-cli`)
-cargo-leptos`)
 
 ## Setup
 
@@ -49,7 +48,7 @@ Then run the scraper:
 
 ```bash 
 cd moses-scraper 
-cargo run --release cd
+cargo run --release -- -j 1
 cd ..
 ```
 
