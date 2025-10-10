@@ -26,7 +26,7 @@ pub fn PageLayout(children: Children) -> impl IntoView {
                                 </div>
                             </div>
                             <a
-                                href="https://github.com/yourusername/tub-modules"
+                                href="https://github.com/zortax/tub-modules"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="btn btn-ghost btn-sm gap-2 shrink-0 lg:hidden"
@@ -43,7 +43,7 @@ pub fn PageLayout(children: Children) -> impl IntoView {
                         // GitHub link on desktop, aligned with search results
                         <div class="hidden lg:flex lg:items-center lg:justify-end lg:max-w-4xl">
                             <a
-                                href="https://github.com/yourusername/tub-modules"
+                                href="https://github.com/zortax/tub-modules"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="btn btn-ghost btn-sm gap-2"
@@ -67,4 +67,3 @@ pub fn PageLayout(children: Children) -> impl IntoView {
         </div>
     }
 }
-
