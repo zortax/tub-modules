@@ -1,7 +1,11 @@
 [workspace]
-members = [
-    "app",
-    "db",
-    "moses-scraper",
-]
+members = ["app", "db", "moses-scraper"]
 resolver = "3"
+
+# Defines a size-optimized profile for the WASM bundle in release mode
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
