@@ -1,0 +1,9 @@
+/target
+**/node_modules
+**/Modul_export.csv
+
+# SQLx offline mode artifacts
+.sqlx/
+
+# Environment variables
+.env

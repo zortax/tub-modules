@@ -1,0 +1,17 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+database = ["dep:sqlx", "dep:tokio", "dep:dotenvy"]
+
+[dependencies]
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Optional dependencies for database connectivity
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros", "migrate"], optional = true }
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros"], optional = true }
+dotenvy = { version = "0.15", optional = true }

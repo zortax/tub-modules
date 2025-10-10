@@ -1,0 +1,44 @@
+[package]
+name = "moses-scraper"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "moses-scraper"
+path = "src/main.rs"
+
+[dependencies]
+# CLI and argument parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# HTML parsing
+scraper = "0.22"
+
+# Async runtime
+tokio = { version = "1.41", features = ["full"] }
+futures = "0.3"
+num_cpus = "1.16"
+
+# Error handling
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+csv = "1.3"
+
+
+# Terminal colors and UI
+colored = "2.1"
+indicatif = "0.17"
+
+# Text parsing
+regex = "1.11"
+
+# Database
+db = { path = "../db", features = ["database"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros"] }
+dotenvy = "0.15"

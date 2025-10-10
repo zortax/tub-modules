@@ -1,0 +1,60 @@
+@import "tailwindcss" source("../");
+
+@plugin "@tailwindcss/typography";
+
+@plugin "daisyui" {
+  themes: all;
+}
+
+@plugin "daisyui/theme" {
+  name: "shadcn";
+  default: true;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: #141417;
+  --color-base-200: #27272A;
+  --color-base-300: #09090B;
+  --color-base-content: oklch(97.807% 0.029 256.847);
+  --color-primary: oklch(87% 0.006 286.286);
+  --color-primary-content: #09090B;
+  /*--color-secondary: #27272A; */
+  --color-secondary: #09090B;
+  --color-secondary-content: oklch(87% 0.006 286.286);
+  --color-accent: oklch(88% 0.059 254.128);
+  --color-accent-content: oklch(38% 0.063 188.416);
+  --color-neutral: #27272A;
+  /* --color-neutral-content: oklch(92% 0.004 286.32); */
+  --color-neutral-content: #929aa1;
+  --color-info: oklch(90% 0.058 230.902);
+  --color-info-content: oklch(29% 0.066 243.157);
+  --color-success: oklch(84% 0.143 164.978);
+  --color-success-content: oklch(37% 0.077 168.94);
+  --color-warning: oklch(92% 0.12 95.746);
+  --color-warning-content: oklch(41% 0.112 45.904);
+  --color-error: oklch(81% 0.117 11.638);
+  --color-error-content: oklch(27% 0.105 12.094);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+  opacity: 0;
+}
