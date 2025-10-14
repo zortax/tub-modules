@@ -6,9 +6,13 @@ use db::PgPool;
 
 /// Get complete module details including all related information
 #[server(GetModuleDetail)]
+#[cfg_attr(feature = "ssr", tracing::instrument(level = "info", fields(module_id = id, module_version = version)))]
 pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, ServerFnError> {
     use leptos_actix::extract;
     use sqlx::query;
+
+    #[cfg(feature = "ssr")]
+    tracing::info!("get_module_detail called for module_id={}, version={}", id, version);
 
     let pool = extract::<actix_web::web::Data<PgPool>>().await?;
     let pool: &PgPool = &*pool;

@@ -32,6 +32,9 @@ sqlx = { version = "0.8", features = [
   "runtime-tokio",
   "macros",
 ], optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+tracing-actix-web = { version = "0.7", optional = true }
 
 [features]
 csr = ["leptos/csr"]
@@ -42,6 +45,9 @@ ssr = [
   "dep:leptos_actix",
   "dep:sqlx",
   "dep:db",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "dep:tracing-actix-web",
   "leptos/ssr",
   "leptos_meta/ssr",
   "leptos_router/ssr",

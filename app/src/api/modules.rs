@@ -9,11 +9,15 @@ use crate::models::ComponentInfo;
 
 /// Get total count of modules matching filters
 #[server(GetModuleCount)]
+#[cfg_attr(feature = "ssr", tracing::instrument(level = "info", skip_all, fields(filter_count = filters.search_query.is_some())))]
 pub async fn get_module_count(
     #[server(default)] filters: SearchFilters,
 ) -> Result<i64, ServerFnError> {
     use leptos_actix::extract;
     use sqlx::Row;
+
+    #[cfg(feature = "ssr")]
+    tracing::info!("get_module_count called");
 
     let pool = extract::<actix_web::web::Data<PgPool>>()
         .await
@@ -130,6 +134,7 @@ pub async fn get_module_count(
 
 /// Get filter options from the database (study programs, exam categories, etc.)
 #[server(GetFilterOptions)]
+#[cfg_attr(feature = "ssr", tracing::instrument(level = "info"))]
 pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     use leptos_actix::extract;
     use sqlx::query;
@@ -241,6 +246,7 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
 
 /// Search modules with filters and pagination
 #[server(SearchModulesPaginated)]
+#[cfg_attr(feature = "ssr", tracing::instrument(level = "info", skip(filters), fields(page = page, page_size = page_size)))]
 pub async fn search_modules_paginated(
     #[server(default)] filters: SearchFilters,
     page: i64,
@@ -248,6 +254,9 @@ pub async fn search_modules_paginated(
 ) -> Result<Vec<ModuleSummary>, ServerFnError> {
     use leptos_actix::extract;
     use sqlx::{query, Row};
+
+    #[cfg(feature = "ssr")]
+    tracing::info!("search_modules_paginated called with page={}, page_size={}", page, page_size);
 
     let pool = extract::<actix_web::web::Data<PgPool>>()
         .await

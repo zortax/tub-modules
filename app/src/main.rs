@@ -9,6 +9,19 @@ async fn main() -> std::io::Result<()> {
     use leptos_actix::{generate_route_list, LeptosRoutes};
     use leptos_meta::MetaTags;
 
+    // Initialize tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new(
+                    "info,tracing_actix_web=info,actix_web=info,app=info",
+                )
+            }),
+        )
+        .init();
+
+    tracing::info!("Tracing initialized successfully");
+
     // Initialize database pool
     let pool = db::create_pool_from_env()
         .await
@@ -23,9 +36,9 @@ async fn main() -> std::io::Result<()> {
         let leptos_options = &conf.leptos_options;
         let site_root = leptos_options.site_root.clone().to_string();
 
-        println!("listening on http://{}", &addr);
-
         App::new()
+            // Add tracing middleware for request logging
+            .wrap(tracing_actix_web::TracingLogger::default())
             // serve JS/WASM/CSS from `pkg`
             .service(Files::new("/pkg", format!("{site_root}/pkg")))
             // serve other assets from the `assets` directory
