@@ -1,7 +1,30 @@
 use leptos::prelude::*;
+use crate::api::get_latest_scraping_run;
+use chrono::{DateTime, Utc, Local};
 
 #[component]
 pub fn PageLayout(children: Children) -> impl IntoView {
+    // Fetch the latest scraping run timestamp
+    let last_updated = Resource::new(|| (), |_| async {
+        get_latest_scraping_run().await.ok().flatten()
+    });
+
+    // Format the timestamp for display
+    let format_timestamp = move |dt: DateTime<Utc>| -> String {
+        let now = chrono::Utc::now();
+        let duration = now.signed_duration_since(dt);
+
+        if duration.num_minutes() < 60 {
+            format!("{} minute{} ago", duration.num_minutes(), if duration.num_minutes() == 1 { "" } else { "s" })
+        } else if duration.num_hours() < 24 {
+            format!("{} hour{} ago", duration.num_hours(), if duration.num_hours() == 1 { "" } else { "s" })
+        } else if duration.num_days() < 7 {
+            format!("{} day{} ago", duration.num_days(), if duration.num_days() == 1 { "" } else { "s" })
+        } else {
+            dt.format("%b %d, %Y at %H:%M UTC").to_string()
+        }
+    };
+
     view! {
         <div class="min-h-screen bg-base-300">
             // Fixed header
@@ -40,8 +63,25 @@ pub fn PageLayout(children: Children) -> impl IntoView {
                             </a>
                         </div>
 
-                        // GitHub link on desktop, aligned with search results
-                        <div class="hidden lg:flex lg:items-center lg:justify-end lg:max-w-4xl">
+                        // Badge and GitHub link on desktop, aligned with search results
+                        <div class="hidden lg:flex lg:items-center lg:justify-end lg:max-w-4xl lg:gap-2">
+                            <Suspense fallback=move || view! { <span class="loading loading-spinner loading-xs"></span> }>
+                                {move || last_updated.get().map(|timestamp_opt| {
+                                    timestamp_opt.map(|timestamp| {
+                                        let formatted = format_timestamp(timestamp);
+                                        let local_time = timestamp.with_timezone(&Local);
+                                        let full_time = format!("Last updated: {}", local_time.format("%B %d, %Y at %H:%M %Z"));
+                                        view! {
+                                            <span class="badge badge-sm badge-ghost tooltip tooltip-bottom whitespace-nowrap" data-tip=full_time.clone()>
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                {formatted}
+                                            </span>
+                                        }
+                                    })
+                                })}
+                            </Suspense>
                             <a
                                 href="https://github.com/zortax/tub-modules"
                                 target="_blank"

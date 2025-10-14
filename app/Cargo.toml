@@ -26,11 +26,13 @@ web-sys = { version = "0.3", features = [
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 gloo-timers = { version = "0.3", features = ["futures"] }
+chrono = { version = "0.4", features = ["serde"] }
 db = { path = "../db", features = ["database"], optional = true }
 sqlx = { version = "0.8", features = [
   "postgres",
   "runtime-tokio",
   "macros",
+  "chrono",
 ], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }

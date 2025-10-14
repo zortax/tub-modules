@@ -58,8 +58,33 @@ async fn main() -> Result<()> {
 
     // Run migrations
     print!("Running database migrations... ");
-    db::run_migrations(&pool).await?;
-    println!("{}", "✓".green());
+    match db::run_migrations(&pool).await {
+        Ok(_) => println!("{}", "✓".green()),
+        Err(e) => {
+            let err_msg = e.to_string();
+            // Allow "already applied but modified" errors since we may have edited migrations
+            if err_msg.contains("previously applied") || err_msg.contains("has been modified") {
+                println!("{} (skipped, already applied)", "✓".yellow());
+            } else {
+                return Err(e.into());
+            }
+        }
+    }
+    println!();
+
+    // Create scraping run
+    print!("Creating scraping run... ");
+    let scraping_run_id = sqlx::query!(
+        r#"
+        INSERT INTO scraping_run (status, total_modules)
+        VALUES ('in_progress', 0)
+        RETURNING id
+        "#
+    )
+    .fetch_one(&pool)
+    .await?
+    .id;
+    println!("{} (run_id: {})", "✓".green(), scraping_run_id.to_string().bright_yellow());
     println!();
 
     // Load modules from CSV export file
@@ -80,6 +105,16 @@ async fn main() -> Result<()> {
         "✓".green(),
         modules.len().to_string().bright_yellow()
     );
+
+    // Update scraping run with total module count
+    sqlx::query!(
+        "UPDATE scraping_run SET total_modules = $1 WHERE id = $2",
+        modules.len() as i32,
+        scraping_run_id
+    )
+    .execute(&pool)
+    .await?;
+
     println!();
 
     // Determine number of parallel workers
@@ -126,7 +161,7 @@ async fn main() -> Result<()> {
                 module_ref.number, module_ref.version
             ));
 
-            match process_module(&pool, &module_ref, retries).await {
+            match process_module(&pool, &module_ref, scraping_run_id, retries).await {
                 Ok(true) => {
                     *successful.lock().await += 1;
                     progress.println(format!(
@@ -174,6 +209,25 @@ async fn main() -> Result<()> {
     let failed = *failed.lock().await;
     let skipped = *skipped.lock().await;
 
+    // Update scraping run with final statistics
+    sqlx::query!(
+        r#"
+        UPDATE scraping_run
+        SET completed_at = NOW(),
+            status = 'completed',
+            successful_modules = $1,
+            failed_modules = $2,
+            skipped_modules = $3
+        WHERE id = $4
+        "#,
+        successful as i32,
+        failed as i32,
+        skipped as i32,
+        scraping_run_id
+    )
+    .execute(&*pool)
+    .await?;
+
     // Print summary
     println!();
     println!("{}", "=".repeat(80).bright_blue());
@@ -190,6 +244,7 @@ async fn main() -> Result<()> {
 async fn process_module(
     pool: &sqlx::PgPool,
     module_ref: &search::ModuleRef,
+    scraping_run_id: i32,
     retries: u32,
 ) -> Result<bool> {
     // Fetch module details
@@ -199,7 +254,7 @@ async fn process_module(
     };
 
     // Map to database models
-    let mapped_data = mapper::map_module_data(pool, scraped_module).await?;
+    let mapped_data = mapper::map_module_data(pool, scraped_module, scraping_run_id).await?;
 
     // Insert into database
     db_ops::insert_module_data(pool, mapped_data).await?;

@@ -657,6 +657,7 @@ fn extract_value_after_label(line: &str, label: &str) -> String {
         .to_string()
 }
 
+#[allow(dead_code)]
 fn find_section_text(document: &Html, headers: &[&str]) -> Option<String> {
     for header in headers {
         if let Some(text) = extract_section_content(document, header) {

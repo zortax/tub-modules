@@ -1,11 +1,38 @@
 use crate::models::{FilterOptions, ModuleSummary, SearchFilters};
 use leptos::prelude::*;
+use chrono::{DateTime, Utc};
 
 #[cfg(feature = "ssr")]
 use db::PgPool;
 
 #[cfg(feature = "ssr")]
 use crate::models::ComponentInfo;
+
+/// Get the timestamp of the latest completed scraping run
+#[server(GetLatestScrapingRun)]
+#[cfg_attr(feature = "ssr", tracing::instrument(level = "info"))]
+pub async fn get_latest_scraping_run() -> Result<Option<DateTime<Utc>>, ServerFnError> {
+    use leptos_actix::extract;
+
+    let pool = extract::<actix_web::web::Data<PgPool>>()
+        .await
+        ?;
+    let pool: &PgPool = &*pool;
+
+    let result = sqlx::query!(
+        r#"
+        SELECT completed_at
+        FROM scraping_run
+        WHERE status = 'completed'
+        ORDER BY completed_at DESC
+        LIMIT 1
+        "#
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result.and_then(|r| r.completed_at))
+}
 
 /// Get total count of modules matching filters
 #[server(GetModuleCount)]
@@ -115,8 +142,14 @@ pub async fn get_module_count(
 
     let query_str = format!(
         r#"
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
         SELECT COUNT(DISTINCT (m.id, m.version))
         FROM module m
+        INNER JOIN latest_modules lm ON m.id = lm.id AND m.version = lm.version AND m.scraping_run_id = lm.scraping_run_id
         WHERE {}
         "#,
         where_clause
@@ -162,11 +195,18 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     })
     .collect();
 
-    // Get distinct exam categories
+    // Get distinct exam categories (from latest runs only)
     let exam_categories = query!(
         r#"
-        SELECT DISTINCT category::text as "category!"
-        FROM exam_component
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
+        SELECT DISTINCT ec.category::text as "category!"
+        FROM exam_component ec
+        JOIN exam e ON ec.exam_id = e.id
+        JOIN latest_modules lm ON e.module_id = lm.id AND e.module_version = lm.version AND e.module_scraping_run_id = lm.scraping_run_id
         ORDER BY category::text
         "#
     )
@@ -177,11 +217,17 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     .map(|row| row.category)
     .collect();
 
-    // Get distinct semester rotations
+    // Get distinct semester rotations (from latest runs only)
     let semester_rotations = query!(
         r#"
-        SELECT DISTINCT rotation::text as "rotation!"
-        FROM module_component
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
+        SELECT DISTINCT mc.rotation::text as "rotation!"
+        FROM module_component mc
+        JOIN latest_modules lm ON mc.module_id = lm.id AND mc.module_version = lm.version AND mc.module_scraping_run_id = lm.scraping_run_id
         ORDER BY rotation::text
         "#
     )
@@ -192,11 +238,17 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     .map(|row| row.rotation)
     .collect();
 
-    // Get distinct component types
+    // Get distinct component types (from latest runs only)
     let component_types = query!(
         r#"
-        SELECT DISTINCT component_type::text as "component_type!"
-        FROM module_component
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
+        SELECT DISTINCT mc.component_type::text as "component_type!"
+        FROM module_component mc
+        JOIN latest_modules lm ON mc.module_id = lm.id AND mc.module_version = lm.version AND mc.module_scraping_run_id = lm.scraping_run_id
         ORDER BY component_type::text
         "#
     )
@@ -207,12 +259,18 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     .map(|row| row.component_type)
     .collect();
 
-    // Get distinct component languages
+    // Get distinct component languages (from latest runs only)
     let component_languages = query!(
         r#"
-        SELECT DISTINCT language as "language!"
-        FROM module_component
-        WHERE language IS NOT NULL AND language != ''
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
+        SELECT DISTINCT mc.language as "language!"
+        FROM module_component mc
+        JOIN latest_modules lm ON mc.module_id = lm.id AND mc.module_version = lm.version AND mc.module_scraping_run_id = lm.scraping_run_id
+        WHERE mc.language IS NOT NULL AND mc.language != ''
         ORDER BY language
         "#
     )
@@ -223,11 +281,17 @@ pub async fn get_filter_options() -> Result<FilterOptions, ServerFnError> {
     .map(|row| row.language)
     .collect();
 
-    // Get credit range
+    // Get credit range (from latest runs only)
     let credit_range = query!(
         r#"
-        SELECT MIN(credits) as "min!", MAX(credits) as "max!"
-        FROM module
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
+        SELECT MIN(m.credits) as "min!", MAX(m.credits) as "max!"
+        FROM module m
+        JOIN latest_modules lm ON m.id = lm.id AND m.version = lm.version AND m.scraping_run_id = lm.scraping_run_id
         "#
     )
     .fetch_one(pool)
@@ -360,9 +424,14 @@ pub async fn search_modules_paginated(
     let where_clause = where_clauses.join(" AND ");
     let offset = page * page_size;
 
-    // Main query
+    // Main query with CTE to get latest modules
     let query_str = format!(
         r#"
+        WITH latest_modules AS (
+            SELECT DISTINCT ON (id, version) id, version, scraping_run_id
+            FROM module
+            ORDER BY id, version, scraping_run_id DESC
+        )
         SELECT DISTINCT
             m.id,
             m.version,
@@ -371,6 +440,7 @@ pub async fn search_modules_paginated(
             m.languages,
             f.name as faculty_name
         FROM module m
+        INNER JOIN latest_modules lm ON m.id = lm.id AND m.version = lm.version AND m.scraping_run_id = lm.scraping_run_id
         LEFT JOIN faculty f ON m.faculty_id = f.id
         WHERE {}
         ORDER BY m.title
@@ -390,15 +460,32 @@ pub async fn search_modules_paginated(
         let id: i32 = row.try_get("id").unwrap_or(0);
         let version: i32 = row.try_get("version").unwrap_or(0);
 
+        // Get the latest scraping_run_id for this module
+        let latest_run_id = query!(
+            r#"
+            SELECT scraping_run_id
+            FROM module
+            WHERE id = $1 AND version = $2
+            ORDER BY scraping_run_id DESC
+            LIMIT 1
+            "#,
+            id,
+            version
+        )
+        .fetch_one(pool)
+        .await?
+        .scraping_run_id;
+
         // Get semester rotations
         let rotations = query!(
             r#"
             SELECT DISTINCT rotation::text as "rotation!"
             FROM module_component
-            WHERE module_id = $1 AND module_version = $2
+            WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
             "#,
             id,
-            version
+            version,
+            latest_run_id
         )
         .fetch_all(pool)
         .await
@@ -413,10 +500,11 @@ pub async fn search_modules_paginated(
             SELECT DISTINCT ec.category::text as "category!"
             FROM exam e
             JOIN exam_component ec ON e.id = ec.exam_id
-            WHERE e.module_id = $1 AND e.module_version = $2
+            WHERE e.module_id = $1 AND e.module_version = $2 AND e.module_scraping_run_id = $3
             "#,
             id,
-            version
+            version,
+            latest_run_id
         )
         .fetch_all(pool)
         .await
@@ -432,10 +520,11 @@ pub async fn search_modules_paginated(
             FROM module_catalog_usage mcu
             JOIN stupo st ON mcu.stupo_id = st.id
             JOIN study_program sp ON st.study_program_id = sp.id
-            WHERE mcu.module_id = $1 AND mcu.module_version = $2
+            WHERE mcu.module_id = $1 AND mcu.module_version = $2 AND mcu.module_scraping_run_id = $3
             "#,
             id,
-            version
+            version,
+            latest_run_id
         )
         .fetch_all(pool)
         .await
@@ -455,11 +544,12 @@ pub async fn search_modules_paginated(
                 sws,
                 language
             FROM module_component
-            WHERE module_id = $1 AND module_version = $2
+            WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
             ORDER BY component_type, number
             "#,
             id,
-            version
+            version,
+            latest_run_id
         )
         .fetch_all(pool)
         .await

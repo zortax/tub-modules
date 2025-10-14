@@ -16,6 +16,7 @@ pub struct MappedModuleData {
 pub struct ModuleData {
     pub id: i32,
     pub version: i32,
+    pub scraping_run_id: i32,
     pub valid_since_semester: Option<db::Semester>,
     pub valid_since_year: Option<i32>,
     pub valid_until_semester: Option<db::Semester>,
@@ -46,6 +47,7 @@ pub struct ModuleData {
 pub struct ContactData {
     pub module_id: i32,
     pub module_version: i32,
+    pub module_scraping_run_id: i32,
     pub secretariat: Option<String>,
     pub contact_person: Option<String>,
     pub email: Option<String>,
@@ -55,6 +57,7 @@ pub struct ContactData {
 pub struct ComponentData {
     pub module_id: i32,
     pub module_version: i32,
+    pub module_scraping_run_id: i32,
     pub module_name: Option<String>,
     pub component_type: String,
     pub number: String,
@@ -66,6 +69,7 @@ pub struct ComponentData {
 pub struct WorkloadData {
     pub module_id: i32,
     pub module_version: i32,
+    pub module_scraping_run_id: i32,
     pub description: String,
     pub factor: f64,
     pub hours: f64,
@@ -75,6 +79,7 @@ pub struct WorkloadData {
 pub struct StudyProgramUsageData {
     pub module_id: i32,
     pub module_version: i32,
+    pub module_scraping_run_id: i32,
     pub stupo_id: i32,
     pub first_usage: String,
     pub last_usage: String,
@@ -83,6 +88,7 @@ pub struct StudyProgramUsageData {
 pub struct ExamData {
     pub module_id: i32,
     pub module_version: i32,
+    pub module_scraping_run_id: i32,
     pub graded: bool,
     pub exam_type: String,
     pub clef: Option<String>,
@@ -96,7 +102,7 @@ pub struct ExamComponentData {
     pub scope: Option<String>,
 }
 
-pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<MappedModuleData> {
+pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule, scraping_run_id: i32) -> Result<MappedModuleData> {
     // Get or create reference data
     let faculty_id = get_or_create_faculty(pool, &scraped.faculty.unwrap_or_else(|| "Unknown".to_string())).await?;
     let institute_id = get_or_create_institute(pool, &scraped.institute.unwrap_or_else(|| "Unknown".to_string())).await?;
@@ -134,6 +140,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
     let module = ModuleData {
         id: scraped.number,
         version: scraped.version,
+        scraping_run_id,
         valid_since_semester,
         valid_since_year,
         valid_until_semester,
@@ -166,6 +173,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
         Some(ContactData {
             module_id: scraped.number,
             module_version: scraped.version,
+            module_scraping_run_id: scraping_run_id,
             secretariat: scraped.secretariat,
             contact_person: scraped.contact_person,
             email: scraped.contact_email,
@@ -177,7 +185,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
 
     // Map components
     let components = scraped.components.into_iter()
-        .filter_map(|c| map_component(scraped.number, scraped.version, c).ok())
+        .filter_map(|c| map_component(scraped.number, scraped.version, scraping_run_id, c).ok())
         .collect();
 
     // Map workload
@@ -185,6 +193,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
         .map(|w| WorkloadData {
             module_id: scraped.number,
             module_version: scraped.version,
+            module_scraping_run_id: scraping_run_id,
             description: w.description,
             factor: w.factor.unwrap_or(1.0),
             hours: w.hours.unwrap_or(0.0),
@@ -195,7 +204,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
     // Map study program usages
     let mut study_program_usages = Vec::new();
     for usage in scraped.study_programs {
-        match map_study_program_usage(pool, scraped.number, scraped.version, usage).await {
+        match map_study_program_usage(pool, scraped.number, scraped.version, scraping_run_id, usage).await {
             Ok(mapped) => study_program_usages.push(mapped),
             Err(_e) => {
                 // Skip failed study program mappings
@@ -205,7 +214,7 @@ pub async fn map_module_data(pool: &PgPool, scraped: ScrapedModule) -> Result<Ma
 
     // Map exam
     let (exam, exam_components) = if let Some(scraped_exam) = scraped.exam {
-        match map_exam(scraped.number, scraped.version, scraped_exam) {
+        match map_exam(scraped.number, scraped.version, scraping_run_id, scraped_exam) {
             Ok((exam_data, components_data)) => (Some(exam_data), components_data),
             Err(_e) => (None, Vec::new()),
         }
@@ -249,7 +258,7 @@ fn parse_validity_period(period_str: &Option<String>) -> Result<(db::Semester, i
     Ok((semester, year))
 }
 
-fn map_component(module_id: i32, module_version: i32, component: ScrapedComponent) -> Result<ComponentData> {
+fn map_component(module_id: i32, module_version: i32, scraping_run_id: i32, component: ScrapedComponent) -> Result<ComponentData> {
     // Normalize component type to uppercase, handle special characters
     let component_type = match component.component_type.to_uppercase().as_str() {
         "ÜE" => "UE".to_string(),
@@ -266,6 +275,7 @@ fn map_component(module_id: i32, module_version: i32, component: ScrapedComponen
     Ok(ComponentData {
         module_id,
         module_version,
+        module_scraping_run_id: scraping_run_id,
         module_name: component.name,
         component_type,
         number: component.number,
@@ -275,7 +285,7 @@ fn map_component(module_id: i32, module_version: i32, component: ScrapedComponen
     })
 }
 
-async fn map_study_program_usage(pool: &PgPool, module_id: i32, module_version: i32, usage: ScrapedStudyProgramUsage) -> Result<StudyProgramUsageData> {
+async fn map_study_program_usage(pool: &PgPool, module_id: i32, module_version: i32, scraping_run_id: i32, usage: ScrapedStudyProgramUsage) -> Result<StudyProgramUsageData> {
     // Get or create study program
     let study_program_id = get_or_create_study_program(
         pool,
@@ -294,6 +304,7 @@ async fn map_study_program_usage(pool: &PgPool, module_id: i32, module_version: 
     Ok(StudyProgramUsageData {
         module_id,
         module_version,
+        module_scraping_run_id: scraping_run_id,
         stupo_id,
         first_usage: usage.first_usage,
         last_usage: usage.last_usage,
@@ -383,10 +394,11 @@ async fn get_or_create_stupo(pool: &PgPool, study_program_id: i32, name: &str, l
     Ok(result.id)
 }
 
-fn map_exam(module_id: i32, module_version: i32, scraped_exam: ScrapedExam) -> Result<(ExamData, Vec<ExamComponentData>)> {
+fn map_exam(module_id: i32, module_version: i32, scraping_run_id: i32, scraped_exam: ScrapedExam) -> Result<(ExamData, Vec<ExamComponentData>)> {
     let exam_data = ExamData {
         module_id,
         module_version,
+        module_scraping_run_id: scraping_run_id,
         graded: scraped_exam.graded,
         exam_type: scraped_exam.exam_type,
         clef: scraped_exam.clef,

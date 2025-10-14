@@ -10,43 +10,18 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
     sqlx::query!(
         r#"
         INSERT INTO module (
-            id, version, valid_since_semester, valid_since_year,
+            id, version, scraping_run_id, valid_since_semester, valid_since_year,
             valid_until_semester, valid_until_year, languages, title,
             credits, m_pord_nr, m_p_nr, mp_pord_nr, mp_p_nr,
             faculty_id, institute_id, fg_id, responsible_id, examination_board_id,
             learning_result, content, teaching_information, max_attendees,
             registration, duration, requirements, additional_info, moses_link
         )
-        VALUES ($1, $2, $3::semester, $4, $5::semester, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
-        ON CONFLICT (id, version) DO UPDATE SET
-            valid_since_semester = $3::semester,
-            valid_since_year = $4,
-            valid_until_semester = $5::semester,
-            valid_until_year = $6,
-            languages = $7,
-            title = $8,
-            credits = $9,
-            m_pord_nr = $10,
-            m_p_nr = $11,
-            mp_pord_nr = $12,
-            mp_p_nr = $13,
-            faculty_id = $14,
-            institute_id = $15,
-            fg_id = $16,
-            responsible_id = $17,
-            examination_board_id = $18,
-            learning_result = $19,
-            content = $20,
-            teaching_information = $21,
-            max_attendees = $22,
-            registration = $23,
-            duration = $24,
-            requirements = $25,
-            additional_info = $26,
-            moses_link = $27
+        VALUES ($1, $2, $3, $4::semester, $5, $6::semester, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         "#,
         data.module.id,
         data.module.version,
+        data.module.scraping_run_id,
         data.module.valid_since_semester as Option<db::Semester>,
         data.module.valid_since_year,
         data.module.valid_until_semester as Option<db::Semester>,
@@ -77,24 +52,16 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
     .await
     .context("Failed to insert module")?;
 
-    // Delete existing contact if updating
-    sqlx::query!(
-        "DELETE FROM contact WHERE module_id = $1 AND module_version = $2",
-        data.module.id,
-        data.module.version
-    )
-    .execute(&mut *tx)
-    .await?;
-
     // Insert contact if present
     if let Some(contact) = data.contact {
         sqlx::query!(
             r#"
-            INSERT INTO contact (module_id, module_version, secretariat, contact_person, email, website)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO contact (module_id, module_version, module_scraping_run_id, secretariat, contact_person, email, website)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             contact.module_id,
             contact.module_version,
+            contact.module_scraping_run_id,
             contact.secretariat,
             contact.contact_person,
             contact.email,
@@ -105,27 +72,19 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
         .context("Failed to insert contact")?;
     }
 
-    // Delete existing components if updating
-    sqlx::query!(
-        "DELETE FROM module_component WHERE module_id = $1 AND module_version = $2",
-        data.module.id,
-        data.module.version
-    )
-    .execute(&mut *tx)
-    .await?;
-
     // Insert components
     for component in data.components {
         sqlx::query!(
             r#"
             INSERT INTO module_component (
-                module_id, module_version, module_name, component_type,
+                module_id, module_version, module_scraping_run_id, module_name, component_type,
                 number, rotation, sws, language
             )
-            VALUES ($1, $2, $3, $4, $5, $6::component_rotation, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::component_rotation, $8, $9)
             "#,
             component.module_id,
             component.module_version,
+            component.module_scraping_run_id,
             component.module_name,
             component.component_type,
             component.number,
@@ -138,26 +97,18 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
         .context("Failed to insert module component")?;
     }
 
-    // Delete existing workload if updating
-    sqlx::query!(
-        "DELETE FROM module_workload_distribution WHERE module_id = $1 AND module_version = $2",
-        data.module.id,
-        data.module.version
-    )
-    .execute(&mut *tx)
-    .await?;
-
     // Insert workload
     for workload in data.workload {
         sqlx::query!(
             r#"
             INSERT INTO module_workload_distribution (
-                module_id, module_version, description, factor, hours, total_hours
+                module_id, module_version, module_scraping_run_id, description, factor, hours, total_hours
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             workload.module_id,
             workload.module_version,
+            workload.module_scraping_run_id,
             workload.description,
             workload.factor,
             workload.hours,
@@ -172,14 +123,12 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
     for usage in data.study_program_usages {
         sqlx::query!(
             r#"
-            INSERT INTO module_catalog_usage (module_id, module_version, stupo_id, first_usage, last_usage)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (module_id, module_version, stupo_id) DO UPDATE SET
-                first_usage = $4,
-                last_usage = $5
+            INSERT INTO module_catalog_usage (module_id, module_version, module_scraping_run_id, stupo_id, first_usage, last_usage)
+            VALUES ($1, $2, $3, $4, $5, $6)
             "#,
             usage.module_id,
             usage.module_version,
+            usage.module_scraping_run_id,
             usage.stupo_id,
             usage.first_usage,
             usage.last_usage
@@ -189,25 +138,17 @@ pub async fn insert_module_data(pool: &PgPool, data: MappedModuleData) -> Result
         .context("Failed to insert module catalog usage")?;
     }
 
-    // Delete existing exam if updating
-    sqlx::query!(
-        "DELETE FROM exam WHERE module_id = $1 AND module_version = $2",
-        data.module.id,
-        data.module.version
-    )
-    .execute(&mut *tx)
-    .await?;
-
     // Insert exam if present
     if let Some(exam) = data.exam {
         let exam_id = sqlx::query!(
             r#"
-            INSERT INTO exam (module_id, module_version, graded, exam_type, clef, description)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO exam (module_id, module_version, module_scraping_run_id, graded, exam_type, clef, description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
             "#,
             exam.module_id,
             exam.module_version,
+            exam.module_scraping_run_id,
             exam.graded,
             exam.exam_type,
             exam.clef,

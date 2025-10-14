@@ -17,6 +17,22 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
     let pool = extract::<actix_web::web::Data<PgPool>>().await?;
     let pool: &PgPool = &*pool;
 
+    // Get the latest scraping_run_id for this module
+    let latest_run_id = query!(
+        r#"
+        SELECT scraping_run_id
+        FROM module
+        WHERE id = $1 AND version = $2
+        ORDER BY scraping_run_id DESC
+        LIMIT 1
+        "#,
+        id,
+        version
+    )
+    .fetch_one(pool)
+    .await?
+    .scraping_run_id;
+
     // Fetch main module data with joined organizations
     let module_row = query!(
         r#"
@@ -46,10 +62,11 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
         LEFT JOIN fachgebiet fg ON m.fg_id = fg.id
         LEFT JOIN responsible_person rp ON m.responsible_id = rp.id
         LEFT JOIN examination_board eb ON m.examination_board_id = eb.id
-        WHERE m.id = $1 AND m.version = $2
+        WHERE m.id = $1 AND m.version = $2 AND m.scraping_run_id = $3
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_one(pool)
     .await?;
@@ -76,10 +93,11 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
         r#"
         SELECT secretariat, contact_person, email, website
         FROM contact
-        WHERE module_id = $1 AND module_version = $2
+        WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_optional(pool)
     .await?
@@ -101,11 +119,12 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
             sws,
             language
         FROM module_component
-        WHERE module_id = $1 AND module_version = $2
+        WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
         ORDER BY component_type, number
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_all(pool)
     .await?
@@ -125,10 +144,11 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
         r#"
         SELECT id, graded, exam_type, description
         FROM exam
-        WHERE module_id = $1 AND module_version = $2
+        WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_all(pool)
     .await?;
@@ -172,11 +192,12 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
         r#"
         SELECT description, total_hours as hours
         FROM module_workload_distribution
-        WHERE module_id = $1 AND module_version = $2
+        WHERE module_id = $1 AND module_version = $2 AND module_scraping_run_id = $3
         ORDER BY id
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_all(pool)
     .await?
@@ -198,11 +219,12 @@ pub async fn get_module_detail(id: i32, version: i32) -> Result<ModuleDetail, Se
         FROM module_catalog_usage mcu
         JOIN stupo st ON mcu.stupo_id = st.id
         JOIN study_program sp ON st.study_program_id = sp.id
-        WHERE mcu.module_id = $1 AND mcu.module_version = $2
+        WHERE mcu.module_id = $1 AND mcu.module_version = $2 AND mcu.module_scraping_run_id = $3
         ORDER BY sp.name, st.name
         "#,
         id,
-        version
+        version,
+        latest_run_id
     )
     .fetch_all(pool)
     .await?
