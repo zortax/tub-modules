@@ -3,6 +3,10 @@ name = "moses-scraper"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "moses_scraper"
+path = "src/lib.rs"
+
 [[bin]]
 name = "moses-scraper"
 path = "src/main.rs"
@@ -42,3 +46,6 @@ regex = "1.11"
 db = { path = "../db", features = ["database"] }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros"] }
 dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"

@@ -1,4 +1,4 @@
-use crate::pages::{HomePage, ModuleDetailPage};
+use crate::pages::{HomePage, ModuleDetailPage, ScraperPage};
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, Stylesheet, Title};
 use leptos_router::{
@@ -25,6 +25,7 @@ pub fn App() -> impl IntoView {
                 <Routes fallback=move || "Not found.">
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=(StaticSegment("module"), ParamSegment("id"), ParamSegment("version")) view=ModuleDetailPage/>
+                    <Route path=StaticSegment("scrape") view=ScraperPage/>
                     <Route path=WildcardSegment("any") view=NotFound/>
                 </Routes>
             </main>

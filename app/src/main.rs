@@ -27,6 +27,9 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to create database pool");
 
+    // Initialize scraper state
+    let scraper_state = app::scraper_state::ScraperState::new();
+
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
 
@@ -45,6 +48,11 @@ async fn main() -> std::io::Result<()> {
             .service(Files::new("/assets", &site_root))
             // serve the favicon from /favicon.ico
             .service(favicon)
+            // SSE endpoint for scraper events
+            .route(
+                "/api/scraper/events",
+                web::get().to(app::api::scraper::scraper_events_sse),
+            )
             .leptos_routes(routes, {
                 let leptos_options = leptos_options.clone();
                 move || {
@@ -67,6 +75,7 @@ async fn main() -> std::io::Result<()> {
             })
             .app_data(web::Data::new(leptos_options.to_owned()))
             .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(scraper_state.clone()))
         //.wrap(middleware::Compress::default())
     })
     .bind(&addr)?

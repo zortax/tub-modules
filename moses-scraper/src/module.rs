@@ -121,29 +121,64 @@ fn parse_header(document: &Html, module: &mut ScrapedModule) -> Result<()> {
         }
     }
 
-    // Get all text content for credits extraction
-    let body_selector = Selector::parse("body").unwrap();
-    if let Some(body) = document.select(&body_selector).next() {
-        let full_text = body.text().collect::<String>();
+    // Extract credits - look specifically in the module header card
+    let card_selector = Selector::parse(".card").unwrap();
 
-        // Extract credits - look for number before "LP"
-        for line in full_text.lines() {
-            if line.contains("Leistungspunkte") || line.contains(" LP") {
-                // Extract number before "LP"
-                if let Some(lp_pos) = line.find("LP") {
-                    let before_lp = &line[..lp_pos];
-                    // Get last sequence of digits
-                    let digits: String = before_lp.chars()
-                        .rev()
-                        .take_while(|c| c.is_numeric() || c.is_whitespace())
-                        .filter(|c| c.is_numeric())
-                        .collect::<String>()
-                        .chars()
-                        .rev()
-                        .collect();
-                    if let Ok(credits) = digits.parse::<i32>() {
-                        module.credits = credits;
-                        break;
+    // Try to find credits in the first card (module metadata)
+    'cards: for card in document.select(&card_selector).take(3) {
+        let card_text = card.text().collect::<String>();
+
+        // Check if this card contains the Leistungspunkte label
+        if card_text.contains("Leistungspunkte") {
+            // Look for the number near "Leistungspunkte" in this card
+            // The structure is typically: "Leistungspunkte\n6"
+            let lines: Vec<&str> = card_text.lines().collect();
+
+            for (i, line) in lines.iter().enumerate() {
+                if line.trim() == "Leistungspunkte" {
+                    // Check the next few lines for a number
+                    for next_line in lines.iter().skip(i + 1).take(3) {
+                        let trimmed = next_line.trim();
+                        // Look for a line that's just a number
+                        if let Ok(credits) = trimmed.parse::<i32>() {
+                            if credits > 0 && credits < 100 {
+                                module.credits = credits;
+                                break 'cards;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: if not found in cards, look for pattern "Damit umfasst das Modul X Leistungspunkte"
+    if module.credits == 0 {
+        let body_selector = Selector::parse("body").unwrap();
+        if let Some(body) = document.select(&body_selector).next() {
+            let full_text = body.text().collect::<String>();
+
+            // Look for the summary statement which contains the total LP
+            for line in full_text.lines() {
+                if line.contains("umfasst das Modul") && line.contains("Leistungspunkte") {
+                    // Extract number before "Leistungspunkte"
+                    if let Some(lp_pos) = line.find("Leistungspunkte") {
+                        let before_lp = &line[..lp_pos];
+                        // Get last sequence of digits
+                        let digits: String = before_lp.chars()
+                            .rev()
+                            .take_while(|c| c.is_numeric() || c.is_whitespace())
+                            .filter(|c| c.is_numeric())
+                            .collect::<String>()
+                            .chars()
+                            .rev()
+                            .collect();
+                        if let Ok(credits) = digits.parse::<i32>() {
+                            if credits > 0 && credits < 100 {
+                                module.credits = credits;
+                                break;
+                            }
+                        }
                     }
                 }
             }

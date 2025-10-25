@@ -3,13 +3,8 @@ use clap::Parser;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::Arc;
-use tokio::sync::{Semaphore, Mutex};
 
-mod search;
-mod module;
-mod mapper;
-mod db_ops;
-mod models;
+use moses_scraper::{search, runner::{ScraperConfig, ScraperEvent, run_scraper}};
 
 #[derive(Parser, Debug)]
 #[command(name = "moses-scraper")]
@@ -126,11 +121,7 @@ async fn main() -> Result<()> {
     );
     println!();
 
-    // Process modules in parallel
-    let successful = Arc::new(Mutex::new(0_usize));
-    let failed = Arc::new(Mutex::new(0_usize));
-    let skipped = Arc::new(Mutex::new(0_usize));
-
+    // Setup progress bar
     let progress = Arc::new(ProgressBar::new(modules.len() as u64));
     progress.set_style(
         ProgressStyle::default_bar()
@@ -139,75 +130,69 @@ async fn main() -> Result<()> {
             .progress_chars("#>-"),
     );
 
+    // Setup scraper config
+    let config = ScraperConfig {
+        retries: args.retries,
+        num_workers,
+    };
+
     let pool = Arc::new(pool);
-    let semaphore = Arc::new(Semaphore::new(num_workers));
+    let progress_clone = Arc::clone(&progress);
 
-    let mut tasks = Vec::new();
-
-    for module_ref in modules {
-        let pool = Arc::clone(&pool);
-        let progress = Arc::clone(&progress);
-        let successful = Arc::clone(&successful);
-        let failed = Arc::clone(&failed);
-        let skipped = Arc::clone(&skipped);
-        let semaphore = Arc::clone(&semaphore);
-        let retries = args.retries;
-
-        let task = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
-
-            progress.set_message(format!(
-                "Processing {} v{}",
-                module_ref.number, module_ref.version
-            ));
-
-            match process_module(&pool, &module_ref, scraping_run_id, retries).await {
-                Ok(true) => {
-                    *successful.lock().await += 1;
-                    progress.println(format!(
+    // Run scraper with event handling
+    let result = run_scraper(
+        pool.clone(),
+        modules,
+        scraping_run_id,
+        config,
+        move |event| {
+            match event {
+                ScraperEvent::Started { .. } => {
+                    // Already printed
+                }
+                ScraperEvent::Progress { current, .. } => {
+                    progress_clone.set_position(current as u64);
+                }
+                ScraperEvent::ModuleSuccess { number, version, title } => {
+                    progress_clone.println(format!(
                         "{} {} v{}: {}",
                         "✓".green(),
-                        module_ref.number.to_string().bright_yellow(),
-                        module_ref.version.to_string().bright_yellow(),
-                        module_ref.title.bright_white()
+                        number.to_string().bright_yellow(),
+                        version.to_string().bright_yellow(),
+                        title.bright_white()
                     ));
                 }
-                Ok(false) => {
-                    *skipped.lock().await += 1;
-                    progress.println(format!(
+                ScraperEvent::ModuleSkipped { number, version, reason } => {
+                    progress_clone.println(format!(
                         "{} {} v{} {}",
                         "⊘".yellow(),
-                        module_ref.number.to_string().bright_black(),
-                        module_ref.version.to_string().bright_black(),
-                        "(auth required)".bright_black()
+                        number.to_string().bright_black(),
+                        version.to_string().bright_black(),
+                        format!("({})", reason).bright_black()
                     ));
                 }
-                Err(e) => {
-                    *failed.lock().await += 1;
-                    progress.println(format!(
+                ScraperEvent::ModuleFailed { number, version, error } => {
+                    progress_clone.println(format!(
                         "{} {} v{}: {}",
                         "✗".red(),
-                        module_ref.number,
-                        module_ref.version,
-                        e.to_string().red()
+                        number,
+                        version,
+                        error.red()
                     ));
                 }
+                ScraperEvent::Completed { .. } => {
+                    // Will be handled below
+                }
             }
-
-            progress.inc(1);
-        });
-
-        tasks.push(task);
-    }
-
-    // Wait for all tasks to complete
-    futures::future::join_all(tasks).await;
+        },
+    )
+    .await?;
 
     progress.finish_and_clear();
 
-    let successful = *successful.lock().await;
-    let failed = *failed.lock().await;
-    let skipped = *skipped.lock().await;
+    let successful = result.successful;
+    let failed = result.failed;
+    let skipped = result.skipped;
 
     // Update scraping run with final statistics
     sqlx::query!(
@@ -239,25 +224,4 @@ async fn main() -> Result<()> {
     println!();
 
     Ok(())
-}
-
-async fn process_module(
-    pool: &sqlx::PgPool,
-    module_ref: &search::ModuleRef,
-    scraping_run_id: i32,
-    retries: u32,
-) -> Result<bool> {
-    // Fetch module details
-    let scraped_module = match module::fetch_module_details(&module_ref.detail_url, retries).await? {
-        Some(m) => m,
-        None => return Ok(false), // Authentication required
-    };
-
-    // Map to database models
-    let mapped_data = mapper::map_module_data(pool, scraped_module, scraping_run_id).await?;
-
-    // Insert into database
-    db_ops::insert_module_data(pool, mapped_data).await?;
-
-    Ok(true)
 }

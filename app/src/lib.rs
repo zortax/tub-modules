@@ -4,6 +4,10 @@ pub mod components;
 pub mod models;
 pub mod pages;
 pub mod starred;
+pub mod scraper_types;
+
+#[cfg(feature = "ssr")]
+pub mod scraper_state;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
