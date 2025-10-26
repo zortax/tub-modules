@@ -1,0 +1,7 @@
+name: tub-modules-k8s
+description: Kubernetes deployment for TUB Modules app
+runtime: nodejs
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: kubernetes-typescript

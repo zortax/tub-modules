@@ -1,0 +1,5 @@
+encryptionsalt: v1:QoxE24JEgvs=:v1:9hIzpmRmnRYi2ikg:wQQMYxxDMhSkHhq9HtwC/ezH8+cnDw==
+config:
+  tub-modules-k8s:imageTag: 0.1.1
+  tub-modules-k8s:ingressHost: tub.zortax.de
+  tub-modules-k8s:appReplicas: "1"

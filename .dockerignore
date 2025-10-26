@@ -1,0 +1,33 @@
+# Don't copy build artifacts and caches
+target/
+**/target/
+
+# Don't copy node_modules (we'll install fresh)
+node_modules/
+**/node_modules/
+
+# Don't copy git files
+.git/
+.gitignore
+
+# Don't copy IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Don't copy local env files
+.env
+.env.local
+
+# Don't copy documentation
+*.md
+docs/
+
+# Don't copy test files
+tests/
+**/tests/
+
+# Keep only what we need
+!.sqlx/
+!db/migrations/

@@ -27,6 +27,13 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to create database pool");
 
+    // Run database migrations
+    tracing::info!("Running database migrations...");
+    db::run_migrations(&pool)
+        .await
+        .expect("Failed to run database migrations");
+    tracing::info!("Database migrations completed successfully");
+
     // Initialize scraper state
     let scraper_state = app::scraper_state::ScraperState::new();
 
